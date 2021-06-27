@@ -110,6 +110,24 @@ def request_youtube_api_next(video_id : String, params : String)
 end
 
 ####################################################################
+# request_youtube_api_player(video_id, params)
+
+def request_youtube_api_player(video_id : String, params : String)
+  # JSON Request data, required by the API
+  data = {
+    "videoId" => video_id,
+    "context"  => make_youtube_api_context("US"),
+  }
+
+  # Append the additionnal parameters if those were provided
+  if params != ""
+    data["params"] = params
+  end
+
+  return _youtube_api_post_json("/youtubei/v1/player", data)
+end
+
+####################################################################
 # request_youtube_api_search(search_query, params, region)
 #
 # Requests the youtubei/v1/search endpoint with the required headers
