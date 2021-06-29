@@ -1583,55 +1583,49 @@ end
 
 # Channels
 
-{"/channel/:ucid/live", "/user/:user/live", "/c/:user/live"}.each do |route|
-  get route do |env|
-    locale = LOCALES[env.get("preferences").as(Preferences).locale]?
+get "/channel/:ucid/live" do |env|
+  locale = LOCALES[env.get("preferences").as(Preferences).locale]?
 
-    # Appears to be a bug in routing, having several routes configured
-    # as `/a/:a`, `/b/:a`, `/c/:a` results in 404
-    value = env.request.resource.split("/")[2]
-    body = ""
-    {"channel", "user", "c"}.each do |type|
-      response = YT_POOL.client &.get("/#{type}/#{value}/live?disable_polymer=1")
-      if response.status_code == 200
-        body = response.body
-      end
+  # Appears to be a bug in routing, having several routes configured
+  # as `/a/:a`, `/b/:a`, `/c/:a` results in 404
+  value = env.request.resource.split("/")[2]
+  body = ""
+  {"channel", "user", "c"}.each do |type|
+    response = YT_POOL.client &.get("/#{type}/#{value}/live?disable_polymer=1")
+    if response.status_code == 200
+      body = response.body
+    end
+  end
+
+  video_id = body.match(/'VIDEO_ID': "(?<id>[a-zA-Z0-9_-]{11})"/).try &.["id"]?
+  if video_id
+    params = [] of String
+    env.params.query.each do |k, v|
+      params << "#{k}=#{v}"
+    end
+    params = params.join("&")
+
+    url = "/watch?v=#{video_id}"
+    if !params.empty?
+      url += "&#{params}"
     end
 
-    video_id = body.match(/'VIDEO_ID': "(?<id>[a-zA-Z0-9_-]{11})"/).try &.["id"]?
-    if video_id
-      params = [] of String
-      env.params.query.each do |k, v|
-        params << "#{k}=#{v}"
-      end
-      params = params.join("&")
-
-      url = "/watch?v=#{video_id}"
-      if !params.empty?
-        url += "&#{params}"
-      end
-
-      env.redirect url
-    else
-      env.redirect "/channel/#{value}"
-    end
+    env.redirect url
+  else
+    env.redirect "/channel/#{value}"
   end
 end
 
-# YouTube appears to let users set a "brand" URL that
-# is different from their username, so we convert that here
-get "/c/:user" do |env|
-  locale = LOCALES[env.get("preferences").as(Preferences).locale]?
-
-  user = env.params.url["user"]
-
-  response = YT_POOL.client &.get("/c/#{user}")
-  html = XML.parse_html(response.body)
-
-  ucid = html.xpath_node(%q(//link[@rel="canonical"])).try &.["href"].split("/")[-1]
-  next env.redirect "/" if !ucid
-
-  env.redirect "/channel/#{ucid}"
+{"/c/:user/:path", "/user/:user/:path", "/user/:user", "/c/:user"}.each do |route|
+  get route do |env|
+    path = env.params.url["path"]? || ""
+    begin
+      browse_id = request_youtube_api_navigation_resolve_url(url: "https://www.youtube.com/#{env.request.path}")["endpoint"]["browseEndpoint"]["browseId"]
+      env.redirect "/channel/#{browse_id}/#{path}"
+    rescue
+      next env.redirect "/"
+    end
+  end
 end
 
 # Legacy endpoint for /user/:username
@@ -1658,21 +1652,6 @@ end
 # don't support it we redirect to '/'
 get "/timedtext_video" do |env|
   env.redirect "/"
-end
-
-get "/user/:user" do |env|
-  user = env.params.url["user"]
-  env.redirect "/channel/#{user}"
-end
-
-get "/user/:user/videos" do |env|
-  user = env.params.url["user"]
-  env.redirect "/channel/#{user}/videos"
-end
-
-get "/user/:user/about" do |env|
-  user = env.params.url["user"]
-  env.redirect "/channel/#{user}"
 end
 
 get "/channel/:ucid/about" do |env|

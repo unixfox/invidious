@@ -119,3 +119,22 @@ def _youtube_api_post_json(endpoint, data)
 
   return initial_data
 end
+
+####################################################################
+# request_youtube_api_navigation_resolve_url(url)
+#
+# Return the browse_id and params for a requested URL.
+# Example: https://www.youtube.com/user/monsieurdream into:
+# "browseId": "UCyWqModMQlbIo8274Wh_ZsQ"
+#
+# The requested data is a URL string
+#
+def request_youtube_api_navigation_resolve_url(url : String)
+  # JSON Request data, required by the API
+  data = {
+    "url"     => url,
+    "context" => make_youtube_api_context("US"),
+  }
+
+  return _youtube_api_post_json("/youtubei/v1/navigation/resolve_url", data)
+end
