@@ -1,0 +1,77 @@
+name: Bug report
+description: Create a bug report to help us improve Invidious
+title: '[Bug] '
+labels: [bug]
+body:
+  - type: checkboxes
+    attributes:
+      label: DO NOT REMOVE OR SKIP THE ISSUE TEMPLATE
+      description: Fill all fields even if you think it is irrelevant for the issue
+      options:
+        - label: I understand that my issue will be locked if I *intentionally* remove or skip any mandatory\* field
+          required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: |
+        Carefully read and work through this check list in order to help us understanding your bug.
+      options:
+        - label: I have read the FAQ: https://docs.invidious.io/faq/
+          required: true
+        - label: I have used the search function to check if there is already an issue open for my problem. There is a [matrix channel](https://matrix.to/#/#invidious:matrix.org) or [IRC](https://web.libera.chat/?channel=#invidious) channel for asking for help.
+          required: true
+        - label: I confirm that this is not a configuration on my side. If it is not then please ask for help on our matrix channel (https://matrix.to/#/#invidious:matrix.org) or IRC (https://web.libera.chat/?channel=#invidious). The maintainers do not have the free time to diagnose your issue sorry.
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Provide a description that is worded well enough to be understood.
+      placeholder: Provide any additional information, any suggested solutions, and as much context and examples as possible.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Complete verbose output of the logs
+      description: |
+        It should look something like this
+      placeholder: |
+        Title: `Missing hash key: "header" (KeyError)`
+        Date: `2024-03-06T16:59:57Z`
+        Route: `/channel/UCbfnHqxXs_K3kvaH-WlNlig`
+        Version: `2024.03.06-593c6e9 @ master`
+
+        <details>
+        <summary>Backtrace</summary>
+        <p>
+           
+        ```
+        Missing hash key: "header" (KeyError)
+          from /usr/lib/crystal/core/json/any.cr:249:3 in 'get_about_info'
+          from src/invidious/routes/channels.cr:372:17 in 'fetch_basic_information'
+          from src/invidious/routes/channels.cr:15:12 in 'videos'
+          from lib/kemal/src/kemal/route.cr:13:9 in '->'
+          from lib/kemal/src/kemal/config.cr:92:7 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:30:7 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:32:7 in 'call_next'
+          from lib/kemal/src/kemal/filter_handler.cr:21:7 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:30:7 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:32:7 in 'call_next'
+          from src/invidious/helpers/handlers.cr:94:12 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:30:7 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:30:7 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:32:7 in 'call_next'
+          from src/ext/kemal_static_file_handler.cr:106:14 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:30:7 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:30:7 in 'call'
+          from /usr/lib/crystal/core/http/server/handler.cr:30:7 in 'call'
+          from /usr/lib/crystal/core/http/server/request_processor.cr:51:11 in 'handle_client'
+          from /usr/lib/crystal/core/fiber.cr:146:11 in 'run'
+          from ???
+        ```
+        </p>
+        </details>
+      render: markdown
+    validations:
+      required: true
