@@ -29,6 +29,7 @@ module YoutubeAPI
     WebEmbeddedPlayer
     WebMobile
     WebScreenEmbed
+    WebCreator
 
     Android
     AndroidEmbeddedPlayer
@@ -76,6 +77,14 @@ module YoutubeAPI
       name_proto: "1",
       version:    "2.20240814.00.00",
       screen:     "EMBED",
+      os_name:    "Windows",
+      os_version: WINDOWS_VERSION,
+      platform:   "DESKTOP",
+    },
+    ClientType::WebCreator => {
+      name:       "WEB_CREATOR",
+      name_proto: "62",
+      version:    "1.20220918",
       os_name:    "Windows",
       os_version: WINDOWS_VERSION,
       platform:   "DESKTOP",
