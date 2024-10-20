@@ -616,11 +616,18 @@ module YoutubeAPI
 
     headers = HTTP::Headers{
       "Content-Type"              => "application/json; charset=UTF-8",
-      "Accept-Encoding"           => "gzip, deflate",
       "x-goog-api-format-version" => "2",
       "x-youtube-client-name"     => client_config.name_proto,
       "x-youtube-client-version"  => client_config.version,
     }
+
+    if CONFIG.invidious_companion && endpoint == "/youtubei/v1/player"
+      headers["Authorization"] = "Bearer " + CONFIG.hmac_key
+    end
+
+    if !CONFIG.invidious_companion
+      headers["Accept-Encoding"] = "gzip, deflate"
+    end
 
     if user_agent = client_config.user_agent
       headers["User-Agent"] = user_agent
@@ -635,11 +642,26 @@ module YoutubeAPI
     LOGGER.trace("YoutubeAPI: ClientConfig: #{client_config}")
     LOGGER.trace("YoutubeAPI: POST data: #{data}")
 
+    invidious_companion_url = CONFIG.invidious_companion
+
     # Send the POST request
-    body = YT_POOL.client() do |client|
-      client.post(url, headers: headers, body: data.to_json) do |response|
-        self._decompress(response.body_io, response.headers["Content-Encoding"]?)
+    if invidious_companion_url && endpoint == "/youtubei/v1/player"
+      begin
+        body = make_client(URI.parse(invidious_companion_url),
+          &.post(endpoint, headers: headers, body: data.to_json).body)
+      rescue
+        raise InfoException.new("Unable to communicate with Invidious companion.")
       end
+    else
+      body = YT_POOL.client() do |client|
+        client.post(url, headers: headers, body: data.to_json) do |response|
+          self._decompress(response.body_io, response.headers["Content-Encoding"]?)
+        end
+      end
+    end
+
+    if body.nil? && invidious_companion_url
+      raise InfoException.new("Unable to communicate with Invidious companion.")
     end
 
     # Convert result to Hash
