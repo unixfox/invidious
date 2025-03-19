@@ -204,8 +204,9 @@ def parse_video_info(video_id : String, player_response : Hash(String, JSON::Any
     raise BrokenTubeException.new("videoSecondaryInfoRenderer") if !video_secondary_renderer
   end
 
-  video_details = player_response.dig?("videoDetails")
-  video_details ||= {} of String => JSON::Any
+  if !(video_details = player_response.dig?("videoDetails"))
+    video_details = {} of String => JSON::Any
+  end
   if !(microformat = player_response.dig?("microformat", "playerMicroformatRenderer"))
     microformat = {} of String => JSON::Any
   end
