@@ -117,6 +117,8 @@ module Invidious::Routes::Watch
       comment_html ||= ""
     end
 
+    if video.reason.nil?
+    # __BEGIN__ :TODO: Indent or factor out this section
     fmt_stream = video.fmt_stream
     adaptive_fmts = video.adaptive_fmts
 
@@ -189,6 +191,10 @@ module Invidious::Routes::Watch
       audio_streams: audio_streams,
       captions: video.captions
     )
+    # __ENDOF__ :TODO: Indent or factor out this section
+    else
+      env.response.status_code = 500
+    end
 
     templated "watch"
   end
