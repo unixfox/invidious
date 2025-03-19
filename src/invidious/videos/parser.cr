@@ -249,7 +249,11 @@ def parse_video_info(video_id : String, player_response : Hash(String, JSON::Any
     .try { |t| Time.parse_rfc3339(t.as_s) }
 
   live_now = microformat.dig?("liveBroadcastDetails", "isLiveNow")
-    .try &.as_bool || false
+    .try &.as_bool
+  if live_now.nil?
+    live_now = video_primary_renderer
+      .try &.dig?("viewCount", "videoViewCountRenderer", "isLive").try &.as_bool || false
+  end
 
   post_live_dvr = video_details.dig?("isPostLiveDvr")
     .try &.as_bool || false
