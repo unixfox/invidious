@@ -275,14 +275,15 @@ def parse_video_info(video_id : String, player_response : Hash(String, JSON::Any
   end
 
   is_listed = video_details["isCrawlable"]?.try &.as_bool
-  if is_listed.nil?
-    if video_badges = video_primary_renderer.try &.dig?("badges")
-      is_listed = !has_unlisted_badge?(video_badges)
+  if video_badges = video_primary_renderer.try &.dig?("badges")
+    if has_unlisted_badge?(video_badges)
+      is_listed ||= false
     else
-      # If video has no badges and videoDetails is not
-      # available, then assume isListed
-      is_listed = true
+      is_listed ||= true
     end
+    # if no badges but videoDetails not available then assume isListed
+  else
+    is_listed ||= true
   end
 
   is_upcoming = video_details["isUpcoming"]?.try &.as_bool
