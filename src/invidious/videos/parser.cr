@@ -230,7 +230,7 @@ def parse_video_info(video_id : String, player_response : Hash(String, JSON::Any
     .try &.as_s.to_i64
 
   published = microformat["publishDate"]?
-    .try { |t| Time.parse(t.as_s, "%Y-%m-%d", Time::Location::UTC) } || Time.utc
+    .try { |t| Time.parse(t.as_s, "%Y-%m-%d", Time::Location::UTC) }
 
   premiere_timestamp = microformat.dig?("liveBroadcastDetails", "startTimestamp")
     .try { |t| Time.parse_rfc3339(t.as_s) }
