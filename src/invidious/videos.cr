@@ -328,6 +328,7 @@ def fetch_video(id, region)
 
   if info["reason"]? && info["subreason"]?
     reason = info["reason"].as_s
+    puts info
     subreason = info["subreason"].as_s
     if reason == "Video unavailable"
       raise NotFoundException.new(reason + ": Video not found" || "")
