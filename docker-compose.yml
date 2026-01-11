@@ -30,16 +30,44 @@ services:
           host: invidious-db
           port: 5432
         check_tables: true
+        # Invidious companion configuration for development
+        # NOTE: These keys are for local development only. Generate new keys for production!
+        invidious_companion:
+        - private_url: "http://companion:8282/companion"
+        invidious_companion_key: "devtestkey123456"
         # external_port:
         # domain:
         # https_only: false
         # statistics_enabled: false
-        hmac_key: "CHANGE_ME!!"
+        # NOTE: This hmac_key is for local development only. Generate a new key for production!
+        hmac_key: "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce"
     healthcheck:
       test: wget -nv --tries=1 --spider http://127.0.0.1:3000/api/v1/stats || exit 1
       interval: 30s
       timeout: 5s
       retries: 2
+
+  companion:
+    image: quay.io/invidious/invidious-companion:latest
+    restart: unless-stopped
+    environment:
+      - SERVER_SECRET_KEY=devtestkey123456
+      - PROXY=socks5://tor:9050
+    depends_on:
+      - tor
+    cap_drop:
+      - ALL
+    read_only: true
+    volumes:
+      - companioncache:/var/tmp/youtubei.js:rw
+    security_opt:
+      - no-new-privileges:true
+
+  tor:
+    image: dperson/torproxy:latest
+    restart: unless-stopped
+    environment:
+      - TOR_NewCircuitPeriod=30
 
   invidious-db:
     image: docker.io/library/postgres:14
@@ -57,3 +85,4 @@ services:
 
 volumes:
   postgresdata:
+  companioncache:
