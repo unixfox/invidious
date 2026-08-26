@@ -2,6 +2,504 @@
 var player_data = JSON.parse(document.getElementById('player_data').textContent);
 var video_data = JSON.parse(document.getElementById('video_data').textContent);
 
+// ------------------ Invidious custom quality selector ------------------
+const ITAG_MAP = {
+  '17': { height: 144, label: '144p' },
+  '18': { height: 360, label: '360p' },
+  '22': { height: 720, label: '720p' }
+};
+
+const AUDIO_ITAG_MAP = {
+  '139': { bitrate: 48, codec: 'm4a', label: 'm4a48k' },
+  '140': { bitrate: 128, codec: 'm4a', label: 'm4a128k' },
+  '141': { bitrate: 256, codec: 'm4a', label: 'm4a256k' },
+  '249': { bitrate: 50, codec: 'opus', label: 'opus50k' },
+  '250': { bitrate: 70, codec: 'opus', label: 'opus70k' },
+  '251': { bitrate: 160, codec: 'opus', label: 'opus160k' }
+};
+
+class QualityMenuItem extends videojs.getComponent('MenuItem') {
+  handleClick(event) {
+    super.handleClick(event);
+
+    if (this.options_.handler) {
+      this.options_.handler.call(this, event);
+    }
+    const menu = this.parentComponent_;
+    if (menu && menu.menuButton_) {
+      menu.menuButton_.unpressButton();
+    }
+  }
+}
+
+class QualityMultiSelector extends videojs.getComponent('MenuButton') {
+  constructor(player, options = {}) {
+    super(player, options);
+
+    this.controlText('Quality');
+    this.addClass('vjs-quality-multi-selector');
+    const iconSpan = this.el().querySelector('.vjs-icon-placeholder');
+    if (iconSpan) {
+      iconSpan.classList.add('vjs-icon-cog');
+    }
+    this._onDocumentTouchEnd = (event) => {
+      if (!this.buttonPressed_) return;
+      const target = event.target;
+      if (
+        target &&
+        !this.el().contains(target) &&
+        !this.menu.el().contains(target)
+      ) {
+        this.unpressButton();
+      }
+    };
+    document.addEventListener('touchend', this._onDocumentTouchEnd);
+    this.on('dispose', () => {
+      document.removeEventListener('touchend', this._onDocumentTouchEnd);
+    });
+
+    Object.assign(this, {
+      _mode: 'dash',
+      _dashLevels: [],
+      _mp4Sources: [],
+      _selectedIndex: -1,
+      _autoSelected: true,
+      _suppressEventsUntilLoaded: false
+    });
+
+    player._qualityMultiSelector = this;
+    this._updateModeAndData();
+    this._setupListeners();
+    this._rebuildMenu();
+  }
+
+  _setupListeners() {
+    const player = this.player();
+    const update = () => {
+      if (this._suppressEventsUntilLoaded) return;
+      this._updateModeAndData();
+      this._rebuildMenu();
+    };
+
+    if (player.qualityLevels) {
+      const qLevels = player.qualityLevels();
+      qLevels.on('addqualitylevel', update);
+      qLevels.on('removequalitylevel', update);
+    }
+
+    player.on('sourceset', update);
+    player.on('loadedmetadata', update);
+  }
+
+  _updateModeAndData() {
+    const player = this.player();
+    const qLevels = player.qualityLevels ? player.qualityLevels() : null;
+
+    if (qLevels && qLevels.length > 0) {
+      this._mode = 'dash';
+      this._mp4Sources = [];
+      this._dashLevels = Array.prototype.map.call(qLevels, (level, originalIndex) => ({ level, originalIndex }))
+        .sort((a, b) =>
+          (this._getHeight(b.level) - this._getHeight(a.level)) ||
+          (this._getFrameRate(b.level) - this._getFrameRate(a.level)) ||
+          (this._getBitrate(b.level) - this._getBitrate(a.level))
+        );
+      this._selectedIndex = -1;
+    } else {
+      this._dashLevels = [];
+      const sources = player.currentSources ? player.currentSources() : [];
+      const allAudio = sources.length > 0 && sources.every(source => this._isAudioSource(source));
+      this._mode = allAudio ? 'audio' : 'mp4';
+
+      this._mp4Sources = sources
+        .slice()
+        .sort((a, b) => {
+          if (this._mode === 'audio') {
+            return this._getAudioBitrate(b) - this._getAudioBitrate(a);
+          }
+          return this._heightFromSource(b) - this._heightFromSource(a);
+        });
+
+      this._selectedIndex = -1;
+      this._autoSelected = true;
+
+      const currentSrc = player.currentSrc();
+      if (currentSrc) {
+        const normalizedCurrent = this._normalizeSrc(currentSrc);
+        const index = this._mp4Sources.findIndex(
+          source => this._normalizeSrc(source.src) === normalizedCurrent
+        );
+        if (index !== -1) {
+          this._selectedIndex = index;
+          this._autoSelected = false;
+        }
+      }
+    }
+  }
+
+  _normalizeSrc(src) {
+    if (!src) return '';
+    try {
+      return new URL(src, document.baseURI).href;
+    } catch (e) {
+      return src;
+    }
+  }
+
+  _isAudioSource(source) {
+    if (!source) return false;
+
+    const src = source.src || '';
+    const itag = (src.match(/itag=(\d+)/i) || [])[1];
+
+    if (itag && AUDIO_ITAG_MAP[itag]) return true;
+
+    return (source.type || '').toLowerCase().startsWith('audio/');
+  }
+
+  _getAudioBitrate(source) {
+    const src = source.src || '';
+    const itag = (src.match(/itag=(\d+)/i) || [])[1];
+
+    if (itag && AUDIO_ITAG_MAP[itag]) return AUDIO_ITAG_MAP[itag].bitrate;
+
+    return source.bitrate || 0;
+  }
+
+  _rebuildMenu() {
+    if (!this.menu) return;
+
+    while (this.menu.children_.length) {
+      this.menu.removeChild(this.menu.children_[0]);
+    }
+
+    this.createItems().forEach(item => this.menu.addChild(item));
+  }
+
+  _updateSelectedMenuItem(selectedIndex) {
+    if (!this.menu) return;
+    const items = this.menu.children_;
+
+    for (let i = 0; i < items.length; i++) {
+      if (i === selectedIndex) {
+        items[i].addClass('vjs-selected');
+      } else {
+        items[i].removeClass('vjs-selected');
+      }
+    }
+  }
+
+  createItems() {
+    if (!this._dashLevels) this._dashLevels = [];
+    if (!this._mp4Sources) this._mp4Sources = [];
+    if (this._mode === undefined) this._mode = 'dash';
+    if (this._autoSelected === undefined) this._autoSelected = true;
+    if (this._selectedIndex === undefined) this._selectedIndex = -1;
+
+    const items = [];
+
+    const addItem = (label, className, handler, selected) => {
+      const item = new QualityMenuItem(this.player(), { label, handler });
+      if (className) item.addClass(className);
+      if (selected) item.addClass('vjs-selected');
+      items.push(item);
+    };
+
+    if (this._mode === 'dash') {
+      addItem('Auto', 'vjs-quality-menu-item-auto', () => this.selectAuto(), this._autoSelected);
+
+      for (const { level, originalIndex } of this._dashLevels) {
+        addItem(
+          this.labelForDashLevel(level),
+          'vjs-quality-menu-item',
+          () => this.selectDashQuality(originalIndex),
+          !this._autoSelected && this._selectedIndex === originalIndex
+        );
+      }
+    } else if (this._mode === 'audio') {
+      this._mp4Sources.forEach((source, index) => {
+        addItem(
+          this.labelForAudioSource(source),
+          'vjs-quality-menu-item',
+          () => this.selectMp4Quality(index),
+          this._selectedIndex === index
+        );
+      });
+    } else {
+      this._mp4Sources.forEach((source, index) => {
+        addItem(
+          this.labelForMp4Source(source),
+          'vjs-quality-menu-item',
+          () => this.selectMp4Quality(index),
+          this._selectedIndex === index
+        );
+      });
+    }
+
+    return items;
+  }
+
+  labelForDashLevel(level) {
+    const height = this._getHeight(level);
+    if (height > 0) {
+      const fps = this._getFrameRate(level);
+      return fps > 0 ? `${height}p@${fps}` : `${height}p`;
+    }
+    if (level.width) return `${level.width}p`;
+    if (level.bitrate) return this._formatBitrate(level.bitrate);
+    return `Quality ${level.id}`;
+  }
+
+  labelForMp4Source(source) {
+    const src = source.src || '';
+    const itag = (src.match(/itag=(\d+)/i) || [])[1];
+    const info = ITAG_MAP[itag];
+    const label = info ? info.label : (source.label || 'Source');
+    return `${label}-${src.toLowerCase().includes('local=true') ? 'local' : 'google'}`;
+  }
+
+  labelForAudioSource(source) {
+    const src = source.src || '';
+    const itag = (src.match(/itag=(\d+)/i) || [])[1];
+    const info = AUDIO_ITAG_MAP[itag];
+    const label = info ? info.label : (source.label || 'Audio');
+    return `${label}-${src.toLowerCase().includes('local=true') ? 'local' : 'google'}`;
+  }
+
+  _heightFromSource(source) {
+    const src = source.src || '';
+    const itag = (src.match(/itag=(\d+)/i) || [])[1];
+    if (itag) return ITAG_MAP[itag] ? ITAG_MAP[itag].height : 0;
+    return source.height || 0;
+  }
+
+  _getHeight(level) { return level.height || 0; }
+
+  _getFrameRate(level) {
+    let fps = level.frameRate;
+    if (fps === undefined || fps === null) return 0;
+
+    if (typeof fps === 'string') {
+      const match = fps.match(/(\d+(?:\.\d+)?)/);
+      if (!match) return 0;
+      fps = parseFloat(match[1]);
+    }
+
+    const num = Math.round(Number(fps));
+    return isNaN(num) ? 0 : num;
+  }
+
+  _getBitrate(level) { return level.bitrate || 0; }
+
+  _formatBitrate(bits) {
+    return bits >= 1000000
+      ? `${(bits / 1000000).toFixed(1)} Mbps`
+      : `${Math.round(bits / 1000)} kbps`;
+  }
+
+  selectAuto() {
+    const levels = this.player().qualityLevels();
+    for (let i = 0; i < levels.length; i++) {
+      levels[i].enabled = true;
+    }
+
+    this._autoSelected = true;
+    this._selectedIndex = -1;
+    this._updateSelectedMenuItem(0);
+  }
+
+  selectDashQuality(originalIndex) {
+    const levels = this.player().qualityLevels();
+    for (let i = 0; i < levels.length; i++) {
+      levels[i].enabled = (i === originalIndex);
+    }
+
+    this._autoSelected = false;
+    this._selectedIndex = originalIndex;
+
+    const itemIndex = this._dashLevels.findIndex(
+      ({ originalIndex: idx }) => idx === originalIndex
+    );
+    if (itemIndex !== -1) {
+      this._updateSelectedMenuItem(itemIndex + 1);
+    }
+  }
+
+  selectMp4Quality(index) {
+    const source = this._mp4Sources[index];
+    if (!source) return;
+
+    const player = this.player();
+    const currentTime = player.currentTime();
+    const wasPaused = player.paused();
+
+    this._suppressEventsUntilLoaded = true;
+    player.src(source);
+
+    player.one('loadedmetadata', () => {
+      player.currentTime(currentTime);
+      if (!wasPaused) player.play();
+      this._suppressEventsUntilLoaded = false;
+    });
+
+    this._autoSelected = false;
+    this._selectedIndex = index;
+    this._updateSelectedMenuItem(index);
+  }
+
+  setAuto() {
+    if (this._mode === 'dash') this.selectAuto();
+  }
+
+  setQualityIndex(index) {
+    if (this._mode === 'dash') this.selectDashQuality(index);
+    else this.selectMp4Quality(index);
+  }
+
+  buildCSSClass() {
+    return `vjs-quality-multi-selector ${super.buildCSSClass()}`;
+  }
+}
+
+videojs.registerComponent('QualityMultiSelector', QualityMultiSelector);
+
+// ------------------ SHARE BUTTON COMPONENT ------------------
+class ShareButton extends videojs.getComponent('Button') {
+  constructor(player, options) {
+    super(player, options);
+    this.controlText('Share');
+    this.addClass('vjs-share-control');
+
+    const iconSpan = this.el().querySelector('.vjs-icon-placeholder');
+    if (iconSpan) {
+      iconSpan.classList.add('vjs-icon-share');
+    }
+  }
+
+  handleClick() {
+    this.openShareDialog();
+  }
+
+  openShareDialog() {
+    if (!this.player_.shareDialog || this.player_.shareDialog.isDisposed()) {
+      this.player_.shareDialog = new ShareDialog(this.player_, {});
+      this.player_.addChild(this.player_.shareDialog);
+    }
+    this.player_.shareDialog.open();
+  }
+}
+videojs.registerComponent('ShareButton', ShareButton);
+
+// ------------------ SHARE DIALOG COMPONENT ------------------
+class ShareDialog extends videojs.getComponent('ModalDialog') {
+  constructor(player, options) {
+    super(player, Object.assign({
+      temporary: false,      // keep dialog in DOM for reopening
+      closeable: true,
+      label: 'Share Menu',
+      content: () => this.buildContent()
+    }, options));
+
+    this.addClass('vjs-share-dialog');
+  }
+
+  buildContent() {
+    const container = document.createElement('div');
+    container.className = 'share-dialog-content';
+
+    const header = document.createElement('div');
+    header.className = 'share-dialog-header';
+    header.textContent = 'Share';
+    container.appendChild(header);
+
+    const urlGroup = this.createInputGroup('Direct Link:', 'share-url-input');
+    const embedGroup = this.createInputGroup('Embed Code:', 'share-embed-input');
+    container.appendChild(urlGroup);
+    container.appendChild(embedGroup);
+
+    const socialsDiv = document.createElement('div');
+    socialsDiv.className = 'share-dialog-socials';
+    const socialItems = [
+      { id: 'fbFeed', css: 'social-fb', label: 'f' },
+      { id: 'tw', css: 'social-tw', label: '𝕏' },
+      { id: 'reddit', css: 'social-reddit', label: 'R' },
+      { id: 'email', css: 'social-email', label: '✉' }
+    ];
+    socialItems.forEach(item => {
+      const link = document.createElement('a');
+      link.className = `social-btn ${item.css}`;
+      link.textContent = item.label;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.dataset.socialId = item.id;
+      socialsDiv.appendChild(link);
+    });
+    container.appendChild(socialsDiv);
+
+    return container;
+  }
+
+  createInputGroup(labelText, inputId) {
+    const group = document.createElement('div');
+    group.className = 'share-input-group';
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'share-input-wrapper';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.readOnly = true;
+    input.id = inputId;
+    input.style.color = '#fff';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'share-copy-btn';
+    copyBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+      </svg>
+    `;
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(input.value).then(() => {
+        copyBtn.style.color = '#4caf50';
+        setTimeout(() => copyBtn.style.color = '', 2000);
+      });
+    });
+    wrapper.appendChild(input);
+    wrapper.appendChild(copyBtn);
+    group.appendChild(label);
+    group.appendChild(wrapper);
+    return group;
+  }
+
+  updateValues() {
+    const url = shareOptions.url;
+    const embed = shareOptions.embedCode;
+
+    const urlInput = this.el().querySelector('#share-url-input');
+    const embedInput = this.el().querySelector('#share-embed-input');
+    if (urlInput) urlInput.value = url;
+    if (embedInput) embedInput.value = embed;
+
+    const socials = this.el().querySelectorAll('.social-btn');
+    socials.forEach(btn => {
+      const id = btn.dataset.socialId;
+      let href = '#';
+      if (id === 'fbFeed') href = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+      else if (id === 'tw') href = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(shareOptions.title)}`;
+      else if (id === 'reddit') href = `https://www.reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(shareOptions.title)}`;
+      else if (id === 'email') href = `mailto:?subject=${encodeURIComponent(shareOptions.title)}&body=${encodeURIComponent(url)}`;
+      btn.href = href;
+    });
+  }
+
+  open() {
+    // Ensure values are updated after the modal is fully opened and content is in DOM
+    this.one('modalopen', () => this.updateValues());
+    super.open();
+  }
+}
+videojs.registerComponent('ShareDialog', ShareDialog);
+
 var options = {
     liveui: true,
     playbackRates: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0],
@@ -22,16 +520,17 @@ var options = {
             'Spacer',
             'captionsButton',
             'audioTrackButton',
-            'qualitySelector',
-            'QualityMenuButton',
+            'QualityMultiSelector',
             'playbackRateMenuButton',
+            'ShareButton',
             'fullscreenToggle'
         ]
     },
     html5: {
         preloadTextTracks: false,
         vhs: {
-            overrideNative: true
+            overrideNative: true,
+            experimentalUseMMS: true
         }
     }
 };
@@ -215,10 +714,14 @@ function isMobile() {
 if (isMobile()) {
     player.mobileUi({ touchControls: { seekSeconds: 5 * player.playbackRate() } });
 
-    var buttons = ['playToggle', 'volumePanel', 'captionsButton'];
+    var buttons = ['playToggle', 'volumePanel', 'captionsButton', 'ShareButton'];
 
-    if (!video_data.params.listen && video_data.params.quality === 'dash') buttons.push('audioTrackButton');
-    if (video_data.params.listen || video_data.params.quality !== 'dash') buttons.push('qualitySelector');
+    if (!video_data.params.listen && video_data.params.quality === 'dash') {
+        buttons.push('audioTrackButton');
+        buttons.push('QualityMultiSelector');
+    } else if (video_data.params.listen || video_data.params.quality !== 'dash') {
+        buttons.push('QualityMultiSelector');
+    }
 
     // Create new control bar object for operation buttons
     const ControlBar = videojs.getComponent('controlBar');
@@ -239,18 +742,6 @@ if (isMobile()) {
     // Playback menu doesn't work when it's initialized outside of the primary control bar
     var playback_element = document.getElementsByClassName('vjs-playback-rate')[0];
     operations_bar_element.append(playback_element);
-
-    // The share and http source selector element can't be fetched till the players ready.
-    player.one('playing', function () {
-        var share_element = document.getElementsByClassName('vjs-share-control')[0];
-        operations_bar_element.append(share_element);
-
-        if (!video_data.params.listen && video_data.params.quality === 'dash') {
-            var http_source_selector = document.getElementsByClassName('vjs-quality-menu-button vjs-menu-button')[0];
-            operations_bar_element.append(http_source_selector);
-
-        }
-    });
 }
 
 // Enable VR video support
@@ -412,34 +903,45 @@ if (video_data.params.autoplay) {
 }
 
 if (!video_data.params.listen && video_data.params.quality === 'dash') {
+    player.ready(function () {
+        player.on('loadedmetadata', function () {
+            const levels = Array.from(player.qualityLevels());
+            if (!levels.length) return;
 
-    if (video_data.params.quality_dash !== 'auto') {
-        player.ready(function () {
-            player.on('loadedmetadata', function () {
-                const qualityLevels = Array.from(player.qualityLevels()).sort(function (a, b) {return a.height - b.height;});
-                let targetQualityLevel;
-                switch (video_data.params.quality_dash) {
-                    case 'best':
-                        targetQualityLevel = qualityLevels.length - 1;
-                        break;
-                    case 'worst':
-                        targetQualityLevel = 0;
-                        break;
-                    default:
-                        const targetHeight = parseInt(video_data.params.quality_dash);
-                        for (let i = 0; i < qualityLevels.length; i++) {
-                            if (qualityLevels[i].height <= targetHeight)
-                                targetQualityLevel = i;
-                            else
-                                break;
-                        }
+            let targetLevel = null;
+
+            switch (video_data.params.quality_dash) {
+                case 'auto':
+                    break;
+                case 'best':
+                    targetLevel = levels.reduce((a, b) => (a.height > b.height ? a : b), levels[0]);
+                    break;
+                case 'worst':
+                    targetLevel = levels.reduce((a, b) => (a.height < b.height ? a : b), levels[0]);
+                    break;
+                default: {
+                    const targetHeight = parseInt(video_data.params.quality_dash);
+                    targetLevel = levels
+                        .filter(level => level.height <= targetHeight)
+                        .sort((a, b) => b.height - a.height)[0];
+                    if (!targetLevel) {
+                        targetLevel = levels.sort((a, b) => b.height - a.height)[0];
+                    }
                 }
-                player.qualityMenu({
-                    defaultResolution: qualityLevels[targetQualityLevel].height
-                });
-            });
+            }
+
+            const selector = player._qualityMultiSelector;
+            if (selector) {
+                if (targetLevel) {
+                    const qualityLevels = player.qualityLevels();
+                    const targetIndex = levels.indexOf(targetLevel);
+                    selector.setQualityIndex(targetIndex);
+                } else {
+                    selector.setAuto();
+                }
+            }
         });
-    }
+    });
 }
 
 player.vttThumbnails({
@@ -787,9 +1289,6 @@ addEventListener('keydown', function (e) {
     player.on('DOMMouseScroll', mouseScroll);
 }());
 
-// Since videojs-share can sometimes be blocked, we defer it until last
-if (player.shareMenu) player.shareMenu();
-
 // show the preferred caption by default
 if (player_data.preferred_caption_found) {
     player.ready(function () {
@@ -804,12 +1303,24 @@ if (player_data.preferred_caption_found) {
 
 // Safari audio double duration fix
 if (navigator.vendor === 'Apple Computer, Inc.' && video_data.params.listen) {
+    function onTimeUpdate() {
+        if (
+            player.remainingTime() < player.duration() / 2 &&
+            player.remainingTime() >= 2
+        ) {
+            player.currentTime(player.duration() - 1);
+        }
+    }
     player.on('loadedmetadata', function () {
-        player.on('timeupdate', function () {
-            if (player.remainingTime() < player.duration() / 2 && player.remainingTime() >= 2) {
-                player.currentTime(player.duration() - 1);
-            }
-        });
+        var type = (player.currentType() || '').toLowerCase();
+
+        // Always remove any previous listener to avoid duplicates
+        player.off('timeupdate', onTimeUpdate);
+
+        // Only attach if the current source contains mp4a
+        if (type.indexOf('mp4a') !== -1) {
+            player.on('timeupdate', onTimeUpdate);
+        }
     });
 }
 
@@ -847,4 +1358,28 @@ addEventListener('DOMContentLoaded', function () {
     if (changeInstanceLink) changeInstanceLink.addEventListener('click', function () {
         changeInstanceLink.href = addCurrentTimeToURL(changeInstanceLink.href);
     });
+});
+
+// Restore old playback rate button behavior (click to cycle rates)
+player.ready(() => {
+  const playbackRateButton = player.controlBar.getChild('playbackRateMenuButton');
+  
+  if (playbackRateButton) {
+    // Remove default click handler by overriding onClick
+    playbackRateButton.handleClick = function() {
+      const rates = this.playbackRates();
+      const currentRate = this.player().playbackRate();
+      
+      // Find next rate, wrap to first if at end
+      let newRate = rates[0];
+      for (let i = 0; i < rates.length; i++) {
+        if (rates[i] > currentRate) {
+          newRate = rates[i];
+          break;
+        }
+      }
+      
+      this.player().playbackRate(newRate);
+    };
+  }
 });

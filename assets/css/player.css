@@ -108,7 +108,8 @@ ul.vjs-menu-content::-webkit-scrollbar {
 }
 
 .vjs-quality-selector,
-.video-js .vjs-quality-menu-wrapper {
+.video-js .vjs-quality-menu-wrapper,
+.vjs-quality-multi-selector {
   order: 4;
 }
 
@@ -260,3 +261,119 @@ video.video-js {
     overflow-x: hidden;
   }
 }
+
+/* --- Share Dialog & Button Styles --- */
+.vjs-share-control .vjs-icon-placeholder svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.vjs-share-dialog .vjs-modal-dialog-content {
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+  max-height: 100%;
+  box-sizing: border-box;
+}
+
+.share-dialog-content {
+  width: 100%;
+  max-width: 750px;
+  max-height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.share-dialog-header {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 15px;
+  letter-spacing: 0.5px;
+}
+
+.share-input-group {
+  margin-bottom: 15px;
+}
+
+.share-input-group label {
+  display: block;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.share-input-wrapper {
+  display: flex;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px;
+}
+
+.share-input-wrapper:focus-within {
+  border-color: rgba(0, 182, 240, 0.6);
+}
+
+.share-input-wrapper input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 10px 12px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  width: 100%;
+}
+
+.share-input-wrapper input::selection {
+  background: rgba(0, 182, 240, 0.3);
+}
+
+.share-copy-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.share-copy-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.share-dialog-socials {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.social-fb { background: #1877F2; }
+.social-tw { background: #000; }
+.social-reddit { background: #FF4500; }
+.social-email { background: #0072C6; }
