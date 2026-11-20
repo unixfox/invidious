@@ -26,6 +26,25 @@ module Invidious::Routes::API::V1::Videos
     end
   end
 
+  # A PO token for the web player's SABR stream of this video
+  def self.potoken(env)
+    env.response.content_type = "application/json"
+
+    id = env.params.url["id"]
+    if !id.matches?(/^[a-zA-Z0-9_-]{11}$/)
+      return Errors.error_json(400, InvalidVideoID.new(id))
+    end
+
+    begin
+      token = YoutubeAPI.potoken(id)
+    rescue ex
+      return Errors.error_json(502, ex)
+    end
+    return Errors.error_json(503, "No PO token available") if token.nil?
+
+    return {"poToken" => token}.to_json
+  end
+
   def self.captions(env)
     env.response.content_type = "application/json"
 

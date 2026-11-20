@@ -38,7 +38,8 @@ var SABRPlayer = (function () {
   // bg-helper-server /generate endpoint. Mints an ATTESTED (StreamProtectionStatus=1)
   // PO token server-side, where jsdom presents a youtube.com origin. In-browser BotGuard
   // (Invidious origin) can only get status 2 (pending), so it's used only as a fallback.
-  var BG_HELPER_URL = 'http://127.0.0.1:4416/generate';
+  // Invidious' route to companion's minter (/api/v1/potoken/:id)
+  var POTOKEN_URL = '/api/v1/potoken/';
 
   // State
   var player = null;
@@ -232,24 +233,20 @@ var SABRPlayer = (function () {
     }
   }
 
-  // Fetch an attested PO token from the bg-helper-server, bound to the video id
-  // (content binding, like FreeTube). The full InnerTube session context is sent so the
-  // helper's att/get challenge is session-bound to our visitorData.
+  // Fetch an attested PO token bound to the video id (content binding, like FreeTube),
+  // minted by Invidious companion through Invidious. A video-bound token does not
+  // depend on the browser's visitorData.
   async function fetchHelperPoToken(visitorData, videoId, context) {
     try {
-      var resp = await fetch(BG_HELPER_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ visitorData: visitorData, videoId: videoId, context: context })
-      });
+      var resp = await fetch(POTOKEN_URL + encodeURIComponent(videoId));
       if (!resp.ok) {
-        console.warn('[SABRPlayer]', 'bg-helper /generate returned', resp.status);
+        console.warn('[SABRPlayer]', '/api/v1/potoken returned', resp.status);
         return null;
       }
       var data = await resp.json();
       return data && data.poToken ? data.poToken : null;
     } catch (err) {
-      console.warn('[SABRPlayer]', 'bg-helper /generate fetch failed', err && err.message);
+      console.warn('[SABRPlayer]', '/api/v1/potoken fetch failed', err && err.message);
       return null;
     }
   }

@@ -259,6 +259,7 @@ module Invidious::Routing
       # Videos
       get "/api/v1/videos/:id", {{ namespace }}::Videos, :videos
       get "/api/v1/storyboards/:id", {{ namespace }}::Videos, :storyboards
+      get "/api/v1/potoken/:id", {{ namespace }}::Videos, :potoken
       get "/api/v1/captions/:id", {{ namespace }}::Videos, :captions
       get "/api/v1/annotations/:id", {{ namespace }}::Videos, :annotations
       get "/api/v1/comments/:id", {{ namespace }}::Videos, :comments

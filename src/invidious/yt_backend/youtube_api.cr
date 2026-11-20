@@ -640,6 +640,19 @@ module YoutubeAPI
   end
 
   ####################################################################
+  # potoken(video_id)
+  #
+  # A PO token bound to the given video, minted by Invidious companion.
+  # The web player needs one for SABR, and YouTube only takes tokens
+  # minted as if on www.youtube.com, which the browser can't do.
+  #
+  def potoken(video_id : String) : String?
+    return nil if !CONFIG.invidious_companion.present?
+    data = self._post_invidious_companion("/youtubei/v1/potoken", {"videoId" => video_id})
+    return data["poToken"]?.try &.as_s?
+  end
+
+  ####################################################################
   # _post_invidious_companion(endpoint, data)
   #
   # Internal function that does the actual request to Invidious companion
